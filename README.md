@@ -2,7 +2,7 @@
 
 Wettervergleich mit sechs öffentlichen Wetterquellen für Debian 13 (Trixie) und Raspberry Pi (arm64).
 
-![LunaWetter](lunawetter.png)
+![LunaWetter](LunaWetter.png)
 
 [Github Seite](https://github.com/Angonikro/LunaWetter/)
 
