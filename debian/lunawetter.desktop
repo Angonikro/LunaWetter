@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=LunaWetter
+Comment=Wettervergleich mit mehreren Anbietern
+Exec=lunawetter
+Icon=lunawetter
+Terminal=false
+Type=Application
+Categories=Utility;Weather;
+StartupNotify=true
