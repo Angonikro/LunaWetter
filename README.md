@@ -75,7 +75,7 @@ sudo apt install python3 python3-pyside6.qtwidgets python3-gi gir1.2-gtk-3.0
 Wechsle im Terminal in den Ordner, in dem die ZIP-Datei liegt, und entpacke sie:
 
 ```bash
-unzip LunaWetter_0.1.23_GITHUB.zip
+unzip LunaWetter_0.1.24_GITHUB.zip
 ```
 
 Falls `unzip` noch nicht installiert ist:
