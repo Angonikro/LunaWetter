@@ -1,15 +1,15 @@
-# LunaWetter 0.1.23
+# LunaWetter 0.1.24
 
 Wettervergleich mit sechs öffentlichen Wetterquellen für Debian 13 (Trixie) und Raspberry Pi (arm64).
 
-![LunaWetter](LunaWetter.png)
+![LunaWetter](lunawetter.png)
 
 [Github Seite](https://github.com/Angonikro/LunaWetter/)
 
 ## Funktionen
 
 - Graphit-Oberfläche mit violetten Akzenten
-- Vergleich von sechs öffentlichen Wetterquellen
+- Vergleich von sechs öffentlichen Wetterquellen: Foreca, MET Norway, DWD ICON, Wetterblick, Wetterkompass und weather.com
 - Ortssuche und parallele Hintergrundabfrage
 - GTK-3-System-Tray mit Temperaturdurchschnitt und Warnhinweisen
 - Automatische Aktualisierung alle 15 Minuten
@@ -33,7 +33,7 @@ Die DEB-Installation ist der einfachste Weg. APT installiert dabei auch die in d
 2. Paket installieren:
 
 ```bash
-sudo apt install ./lunawetter_0.1.23_all.deb
+sudo apt install ./lunawetter_0.1.24_all.deb
 ```
 
 Falls APT nachfragt, die Installation mit `J` bestätigen.

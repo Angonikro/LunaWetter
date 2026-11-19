@@ -1,3 +1,17 @@
+## 0.1.24 – MET Norway und DWD ICON (Versionsnummer beibehalten)
+- AccuWeather und Meteologix aufgrund der auf dem Zielsystem beobachteten HTTP-403-Fehler ausgetauscht.
+- MET Norway über die offizielle Locationforecast 2.0 JSON-API integriert; weltweite Vorhersage, Tageswerte und aktuelle Wetterwerte.
+- MET Norway Anfragen verwenden einen identifizierenden LunaWetter-User-Agent und werden für identische Koordinaten drei Stunden zwischengespeichert (außerhalb der nordischen Region).
+- DWD ICON über den dedizierten DWD-ICON-Endpunkt mit explizitem ICON-Modell integriert; sieben Tage Tagesvorhersage plus aktuelle Stundenwerte.
+- Foreca, Wetterblick, Wetterkompass und weather.com bleiben erhalten.
+- Standardmäßig wird nach dem Start MET Norway ausgewählt.
+- wetter.com und Weather-Forecast.com aus der aktiven Sechser-Auswahl entfernt.
+- AccuWeather und Meteologix als Ersatzanbieter aufgenommen.
+- Foreca bleibt ausdrücklich erhalten; Wetterblick, Wetterkompass und weather.com bleiben ebenfalls bestehen.
+- AccuWeather- und Meteologix-Seiten werden auf auslesbare Tageswerte für die 7-Tage-Ansicht geprüft.
+- Fehlende Original-Tageswerte werden weiterhin ausschließlich als separat gekennzeichnetes Open-Meteo-Zusatzmodell ergänzt.
+- Standardmäßig wird nach dem Start AccuWeather ausgewählt.
+
 ### Korrektur innerhalb 0.1.23 – Wintersymbole
 - Schneefall, Schneeschauer, Schneeregen und Graupel erhalten ein eigenes Schneewolken-Symbol (🌨️).
 - Schneesymbole werden in aktueller Wetteranzeige und 7-Tage-Karten mit winterlich hellblauem Akzent und Emoji-Schrift dargestellt.

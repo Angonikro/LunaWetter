@@ -10,14 +10,17 @@ import html
 import json
 import queue
 import threading
+import time
 import re
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 
 TIMEOUT = 18
-UA = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36 LunaWetter/0.1.23"
+UA = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36 LunaWetter/0.1.24"
 
 
 class TextExtractor(HTMLParser):
@@ -57,8 +60,8 @@ def _links(source: str):
 # listed, but only public pages are read; no paid/private API is called.
 PROVIDERS = [
     ("Foreca", "Finnland", "Öffentliche Wetterseite"),
-    ("wetter.com", "Deutschland", "Öffentliche Wetterseite"),
-    ("Weather-Forecast.com", "Großbritannien", "Öffentliche 12-Tage-Ortsvorhersage und nahe Wetterstationen"),
+    ("MET Norway", "Norwegen", "Offizielle weltweite Locationforecast-API, bis zu 9 Tage"),
+    ("DWD ICON", "Deutschland", "DWD-ICON-Wettermodell, 7 Tage"),
     ("Wetterblick", "Deutschland", "Eigene Modellprognose, DWD- und private Stationsmessungen"),
     ("Wetterkompass", "Deutschland", "DWD-Modellvorhersage – öffentliche Ortsseite"),
     ("weather.com", "USA", "The Weather Channel – öffentliche Ortswetterseite"),
@@ -102,7 +105,7 @@ def extract_week_forecast(visible_text: str) -> list[dict]:
     text = re.sub(r"\s+", " ", visible_text or "")
     if not text:
         return []
-    day_pattern = r"(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Mo|Di|Mi|Do|Fr|Sa|So)"
+    day_pattern = r"(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mo|Di|Mi|Do|Fr|Sa|So|Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
     matches = list(re.finditer(rf"\b{day_pattern}\b", text, re.I))
     results = []
     seen = set()
@@ -118,7 +121,7 @@ def extract_week_forecast(visible_text: str) -> list[dict]:
         )
         if not pair:
             pair = re.search(
-                r"max(?:imal)?\s+(-?\d{1,2})\s*°\s*C?.{0,90}?min(?:imal)?\s+(-?\d{1,2})\s*°\s*C?",
+                r"(?:max(?:imal)?|high)\s+(-?\d{1,2})\s*°\s*C?.{0,120}?(?:min(?:imal)?|low)\s+(-?\d{1,2})\s*°\s*C?",
                 section, re.I
             )
         if not pair:
@@ -415,10 +418,13 @@ def fetch_accuweather(place: str) -> dict:
     if not unit_match:
         raise RuntimeError("AccuWeather: Die öffentliche Seite nennt im auslesbaren Inhalt keine eindeutige Temperatureinheit.")
     unit = "°" + unit_match.group(1).upper()
+    forecast = extract_week_forecast(text)
     return {"provider":"AccuWeather", "temperature":temp, "temperature_unit":unit,
             "description":"Öffentliche AccuWeather-Vorhersage", "minimum":None,
-            "rain":number(r"\b(\d{1,3})\s*%", text[:4000]), "wind":None,
-            "detail":"Temperatur direkt von der öffentlichen Wetterseite", "source_url":url}
+            "rain":number(r"\\b(\\d{1,3})\\s*%", text[:4000]), "wind":None,
+            "detail":"Temperatur direkt von der öffentlichen Wetterseite",
+            "forecast":forecast, "warnings":extract_page_warnings("", text),
+            "source_url":url}
 
 
 
@@ -563,6 +569,8 @@ def fetch_meteologix(place: str) -> dict:
             "rain": None,
             "wind": None,
             "detail": f"Berechnet für {calculated_time} Uhr · Modellwert, keine Stationsmessung",
+            "forecast": extract_week_forecast(text),
+            "warnings": extract_page_warnings(source, text),
             "source_url": url,
         }
     raise RuntimeError(f"Meteologix: Öffentliche Ortsseite nicht auslesbar ({last_error}).")
@@ -1117,6 +1125,196 @@ def complete_provider_forecasts(place: str, results: list[tuple[str, dict]]) -> 
         completed.append((name, original))
     return completed
 
+
+# MET Norway Locationforecast cache. For locations outside the Nordic area the
+# provider asks clients not to repeat identical requests more often than every
+# three hours. The application refreshes more frequently, so cache by rounded
+# coordinates and honour that interval.
+_METNO_CACHE = {}
+_METNO_CACHE_LOCK = threading.Lock()
+_METNO_CACHE_SECONDS = 3 * 60 * 60
+
+
+def _metno_weather_text(symbol: str | None) -> str:
+    if not symbol:
+        return "Wetterlage nicht näher beschrieben"
+    key = symbol.split("_")[0].casefold()
+    labels = {
+        "clearsky": "Klar", "fair": "Heiter", "partlycloudy": "Teilweise bewölkt",
+        "cloudy": "Bewölkt", "fog": "Nebel", "lightrain": "Leichter Regen",
+        "rain": "Regen", "heavyrain": "Starker Regen",
+        "lightrainshowers": "Leichte Regenschauer", "rainshowers": "Regenschauer",
+        "heavyrainshowers": "Starke Regenschauer", "lightsleet": "Leichter Schneeregen",
+        "sleet": "Schneeregen", "heavysleet": "Starker Schneeregen",
+        "lightsnow": "Leichter Schneefall", "snow": "Schneefall",
+        "heavysnow": "Starker Schneefall", "lightsnowshowers": "Leichte Schneeschauer",
+        "snowshowers": "Schneeschauer", "heavysnowshowers": "Starke Schneeschauer",
+        "thunderstorm": "Gewitter", "lightrainandthunder": "Leichter Regen mit Gewitter",
+        "rainandthunder": "Regen mit Gewitter", "heavyrainandthunder": "Starker Regen mit Gewitter",
+    }
+    return labels.get(key, key.replace("and", " und ").replace("showers", "Schauer").capitalize())
+
+
+def fetch_met_norway(place: str) -> dict:
+    """Fetch MET Norway's official global Locationforecast 2.0 data."""
+    location = _open_meteo_geocode(place)
+    lat = round(float(location["latitude"]), 4)
+    lon = round(float(location["longitude"]), 4)
+    cache_key = (lat, lon)
+    now_epoch = time.time()
+    with _METNO_CACHE_LOCK:
+        cached = _METNO_CACHE.get(cache_key)
+        if cached and now_epoch - cached[0] < _METNO_CACHE_SECONDS:
+            payload = cached[1]
+        else:
+            query = urllib.parse.urlencode({"lat": f"{lat:.4f}", "lon": f"{lon:.4f}"})
+            url = "https://api.met.no/weatherapi/locationforecast/2.0/compact?" + query
+            request = urllib.request.Request(url, headers={
+                "User-Agent": "LunaWetter/0.1.24 (+https://github.com/Angonikro/LunaWetter)",
+                "Accept": "application/json",
+            })
+            with urllib.request.urlopen(request, timeout=18) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, dict) or not payload.get("properties", {}).get("timeseries"):
+                raise RuntimeError("MET Norway: Die Locationforecast-API lieferte keine Zeitreihen.")
+            _METNO_CACHE[cache_key] = (now_epoch, payload)
+
+    timezone_name = location.get("timezone") or "Europe/Berlin"
+    try:
+        local_tz = ZoneInfo(timezone_name)
+    except Exception:
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+
+    series = payload["properties"]["timeseries"]
+    daily = {}
+    parsed = []
+    for entry in series:
+        try:
+            stamp = datetime.fromisoformat(entry["time"].replace("Z", "+00:00"))
+            local_stamp = stamp.astimezone(local_tz)
+        except (KeyError, TypeError, ValueError):
+            continue
+        data = entry.get("data", {})
+        instant = data.get("instant", {}).get("details", {})
+        temp = instant.get("air_temperature")
+        if temp is None:
+            continue
+        next1 = data.get("next_1_hours") or {}
+        next6 = data.get("next_6_hours") or {}
+        next12 = data.get("next_12_hours") or {}
+        summary = next1.get("summary") or next6.get("summary") or next12.get("summary") or {}
+        details = next1.get("details") or next6.get("details") or next12.get("details") or {}
+        symbol = summary.get("symbol_code")
+        row = {
+            "time": local_stamp, "temp": float(temp),
+            "wind": instant.get("wind_speed"),
+            "humidity": instant.get("relative_humidity"),
+            "pressure": instant.get("air_pressure_at_sea_level"),
+            "symbol": symbol,
+            "rain_probability": details.get("probability_of_precipitation"),
+            "rain_amount": details.get("precipitation_amount"),
+        }
+        parsed.append(row)
+        key = local_stamp.date().isoformat()
+        day = daily.setdefault(key, {"temps": [], "winds": [], "rain": [], "amount": [], "symbols": []})
+        day["temps"].append(float(temp))
+        if row["wind"] is not None: day["winds"].append(float(row["wind"]))
+        if row["rain_probability"] is not None: day["rain"].append(float(row["rain_probability"]))
+        if row["rain_amount"] is not None: day["amount"].append(float(row["rain_amount"]))
+        if symbol: day["symbols"].append(symbol)
+
+    if not parsed:
+        raise RuntimeError("MET Norway: Keine verwertbaren Temperaturwerte in der Vorhersage.")
+    current = min(parsed, key=lambda item: abs((item["time"] - datetime.now(local_tz)).total_seconds()))
+    forecast = []
+    weekday = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+    for date_key, values in list(sorted(daily.items()))[:7]:
+        day_date = datetime.fromisoformat(date_key).date()
+        # Use the most common daytime symbol rather than an arbitrary first symbol.
+        symbols = values["symbols"]
+        symbol = max(set(symbols), key=symbols.count) if symbols else None
+        forecast.append({
+            "day": weekday[day_date.weekday()], "date": date_key,
+            "high": round(max(values["temps"]), 1), "low": round(min(values["temps"]), 1),
+            "condition": _metno_weather_text(symbol),
+            "rain": round(max(values["rain"])) if values["rain"] else None,
+            "amount": round(sum(values["amount"]), 1) if values["amount"] else None,
+            "wind": round(max(values["winds"]), 1) if values["winds"] else None,
+        })
+    detail_parts = []
+    if current.get("humidity") is not None: detail_parts.append(f"Luftfeuchte {current['humidity']:.0f} %")
+    if current.get("pressure") is not None: detail_parts.append(f"Luftdruck {current['pressure']:.0f} hPa")
+    return {
+        "provider": "MET Norway", "temperature": current["temp"], "temperature_unit": "°C",
+        "description": _metno_weather_text(current.get("symbol")),
+        "minimum": None, "rain": current.get("rain_probability"),
+        "wind": f"{current['wind']:.1f} m/s" if current.get("wind") is not None else None,
+        "detail": " · ".join(detail_parts) or "Offizielle MET Norway Locationforecast 2.0",
+        "forecast": forecast, "source_url": "https://api.met.no/weatherapi/locationforecast/2.0/",
+    }
+
+
+def fetch_dwd_icon(place: str) -> dict:
+    """Fetch the dedicated DWD ICON forecast endpoint (7-day global ICON model)."""
+    location = _open_meteo_geocode(place)
+    params = urllib.parse.urlencode({
+        "latitude": location["latitude"], "longitude": location["longitude"],
+        "daily": ",".join((
+            "weather_code", "temperature_2m_max", "temperature_2m_min",
+            "precipitation_sum", "wind_speed_10m_max",
+        )),
+        "hourly": ",".join(("temperature_2m", "weather_code", "precipitation_probability", "wind_speed_10m")),
+        "forecast_days": 7, "timezone": "auto", "wind_speed_unit": "kmh",
+        "precipitation_unit": "mm", "temperature_unit": "celsius",
+    })
+    url = "https://api.open-meteo.com/v1/dwd-icon?" + params
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "LunaWetter/0.1.24 (+https://github.com/Angonikro/LunaWetter)",
+        "Accept": "application/json",
+    })
+    with urllib.request.urlopen(request, timeout=18) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    if not times:
+        raise RuntimeError("DWD ICON: Die Schnittstelle lieferte keine Stundenwerte.")
+    now_local = datetime.now().strftime("%Y-%m-%dT%H:00")
+    index = min(range(len(times)), key=lambda i: abs(
+        (datetime.fromisoformat(times[i]) - datetime.fromisoformat(now_local)).total_seconds()
+    ))
+    def at(key):
+        values = hourly.get(key) or []
+        return values[index] if index < len(values) else None
+    daily = payload.get("daily") or {}
+    dates = daily.get("time") or []
+    forecast = []
+    weekday = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+    for i, date_text in enumerate(dates[:7]):
+        def dval(key):
+            values = daily.get(key) or []
+            return values[i] if i < len(values) else None
+        day_date = datetime.fromisoformat(date_text).date()
+        code = dval("weather_code")
+        forecast.append({
+            "day": weekday[day_date.weekday()], "date": date_text,
+            "high": dval("temperature_2m_max"), "low": dval("temperature_2m_min"),
+            "condition": _wmo_description(code),
+            "rain": None, "amount": dval("precipitation_sum"),
+            "wind": dval("wind_speed_10m_max"),
+        })
+    code = at("weather_code")
+    description = _wmo_description(code)
+    wind = at("wind_speed_10m")
+    return {
+        "provider": "DWD ICON", "temperature": at("temperature_2m"),
+        "temperature_unit": "°C", "description": description,
+        "minimum": None, "rain": at("precipitation_probability"),
+        "wind": f"{wind:g} km/h" if wind is not None else None,
+        "detail": "DWD ICON Global · 7-Tage-Modellvorhersage über die öffentliche DWD-ICON-Schnittstelle",
+        "forecast": forecast, "source_url": "https://open-meteo.com/en/docs/dwd-api",
+    }
+
+
 def fetch_all(place: str):
     """Fetch the six confirmed providers concurrently using daemon threads.
 
@@ -1126,8 +1324,8 @@ def fetch_all(place: str):
     """
     providers = [
         ("Foreca", fetch_foreca),
-        ("wetter.com", fetch_wettercom),
-        ("Weather-Forecast.com", fetch_weather_forecast),
+        ("MET Norway", fetch_met_norway),
+        ("DWD ICON", fetch_dwd_icon),
         ("Wetterblick", fetch_wetterblick),
         ("Wetterkompass", fetch_wetterkompass),
         ("weather.com", fetch_weather_com),

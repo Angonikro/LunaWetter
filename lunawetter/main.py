@@ -63,7 +63,7 @@ class LunaWetter(QMainWindow):
         self.settings=QSettings("Goldisoft","LunaWetter")
         self.setWindowTitle(f"LunaWetter {__version__} – Wettervorhersage")
         self.resize(1600,930); self.setMinimumSize(1050,700)
-        self.results={}; self.selected_provider="wetter.com"
+        self.results={}; self.selected_provider="MET Norway"
         self.fetching=False; self.fetching_place=""; self.fetch_signals=None
         self._closing=False; self.warning_count=0; self.warning_expanded=True
         central=QWidget(); self.setCentralWidget(central)
