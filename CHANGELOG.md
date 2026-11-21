@@ -1,3 +1,9 @@
+## 0.1.25 – Native Qt-Tray und Fensterrand
+- GTK-3-StatusIcon vollständig durch native Qt-System-Tray-Integration (QSystemTrayIcon) ersetzt; keine GTK-Laufzeitabhängigkeit mehr.
+- Tray-Menü zeigt weiterhin Temperaturdurchschnitt und Wetterwarnungen sowie Anzeigen/Beenden.
+- Rahmen nochmals korrigiert: QFrame liegt jetzt mit 3 px Abstand innerhalb des Fensters und zeichnet eine 2 px Kontur; dadurch wird die rechte Kante nicht mehr direkt an der nativen Fenstergrenze abgeschnitten.
+- Versionsnummer auf 0.1.25 erhöht.
+
 ## 0.1.24 – MET Norway und DWD ICON (Versionsnummer beibehalten)
 - AccuWeather und Meteologix aufgrund der auf dem Zielsystem beobachteten HTTP-403-Fehler ausgetauscht.
 - MET Norway über die offizielle Locationforecast 2.0 JSON-API integriert; weltweite Vorhersage, Tageswerte und aktuelle Wetterwerte.

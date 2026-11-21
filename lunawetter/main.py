@@ -5,15 +5,16 @@ import re
 from PySide6.QtCore import QTimer, Qt, QObject, Signal, QSettings
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,
+    QApplication,QMainWindow,QWidget,QFrame,QVBoxLayout,QHBoxLayout,QGridLayout,
     QLabel,QLineEdit,QPushButton,QFrame,QScrollArea,QMessageBox,QSizePolicy
 )
 from .providers import fetch_all, PROVIDERS
 from . import __version__
-from .tray import GtkStatusTray
+from .tray import QtStatusTray
 
 APP_STYLE = """
 QMainWindow,QDialog,QWidget { background:#171923; color:#f2f2f8; font-family:'Noto Sans'; }
+QWidget#windowShell { background:#171923; }\nQFrame#centralRoot { background:#171923; border:2px solid #65708f; }
 QLabel { color:#f2f2f8; background:transparent; }
 QLabel#metricCaption { color:#aeb5ca; font-size:9pt; }
 QLabel#metricValue { color:#f5f2ff; font-size:11pt; font-weight:750; }
@@ -66,7 +67,13 @@ class LunaWetter(QMainWindow):
         self.results={}; self.selected_provider="MET Norway"
         self.fetching=False; self.fetching_place=""; self.fetch_signals=None
         self._closing=False; self.warning_count=0; self.warning_expanded=True
-        central=QWidget(); self.setCentralWidget(central)
+        # Inset frame: keep the visible outline away from the native window edge,
+        # where some window managers/compositors clip a 1 px frame.
+        shell=QWidget(); shell.setObjectName("windowShell"); self.setCentralWidget(shell)
+        shell_layout=QVBoxLayout(shell); shell_layout.setContentsMargins(3,3,3,3); shell_layout.setSpacing(0)
+        central=QFrame(); central.setObjectName("centralRoot")
+        central.setFrameShape(QFrame.Shape.Box); central.setFrameShadow(QFrame.Shadow.Plain); central.setLineWidth(2)
+        shell_layout.addWidget(central)
         outer=QVBoxLayout(central); outer.setContentsMargins(12,8,12,8); outer.setSpacing(8)
 
         # Header bar matching the approved mockup.
@@ -193,7 +200,7 @@ class LunaWetter(QMainWindow):
         self.auto_refresh_timer=QTimer(self); self.auto_refresh_timer.setSingleShot(True); self.auto_refresh_timer.setInterval(1100); self.auto_refresh_timer.timeout.connect(self.refresh)
         self.periodic_refresh_timer=QTimer(self); self.periodic_refresh_timer.setInterval(15*60*1000); self.periodic_refresh_timer.timeout.connect(self.refresh)
         self.place.textChanged.connect(self.schedule_auto_refresh)
-        try: self.tray=GtkStatusTray(self.show_from_tray,self.quit_from_tray,language="de")
+        try: self.tray=QtStatusTray(self.show_from_tray,self.quit_from_tray,language="de")
         except Exception: self.tray=None
         self.restoreGeometry(self.settings.value("geometry",b""))
         self.select_provider(self.selected_provider)

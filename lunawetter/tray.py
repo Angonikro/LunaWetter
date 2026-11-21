@@ -1,113 +1,69 @@
-"""GTK 3 StatusIcon tray implementation copied in principle from LunaSecurity 0.4.37."""
+"""Native Qt system tray for LunaWetter; no GTK dependency."""
 from __future__ import annotations
-import threading
+from PySide6.QtCore import QObject
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QStyle
 
-class GtkStatusTray:
-    """GTK StatusIcon in its own GLib thread; same reliable method as LunaSecurity."""
+class QtStatusTray(QObject):
+    """Qt system tray with temperature average and weather-warning status."""
     def __init__(self, on_show, on_quit, on_error=None, language="de"):
-        self.language, self.on_show, self.on_quit, self.on_error = language, on_show, on_quit, on_error
-        self.icon = self.menu = self.average_item = self.warning_item = None
-        self.Gtk = self.GLib = None
-        self.ready = threading.Event()
-        self.error = None
-        self.thread = threading.Thread(target=self._run, daemon=True, name="LunaWetter-GTK-Tray")
-        self.thread.start()
-        self.ready.wait(timeout=4)
-        if self.error:
-            raise RuntimeError(self.error)
-        if self.icon is None:
-            raise RuntimeError("GTK-System-Tray konnte nicht initialisiert werden")
+        super().__init__()
+        self.on_show, self.on_quit, self.language = on_show, on_quit, language
+        self.tray = QSystemTrayIcon(self)
+        style = QApplication.style()
+        self.icons = {
+            "normal": QIcon.fromTheme("weather-clear", style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)),
+            "warning": QIcon.fromTheme("weather-showers", style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)),
+            "critical": style.standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical),
+        }
+        self.menu = QMenu()
+        self.average_action = QAction("Durchschnitt: noch keine Daten", self.menu)
+        self.average_action.setEnabled(False); self.menu.addAction(self.average_action)
+        self.warning_action = QAction("✓ Keine Wetterwarnungen", self.menu)
+        self.warning_action.setEnabled(False); self.menu.addAction(self.warning_action)
+        self.menu.addSeparator()
+        show_text = "LunaWetter anzeigen" if language == "de" else "Show LunaWetter"
+        quit_text = "LunaWetter beenden" if language == "de" else "Quit LunaWetter"
+        show_action = QAction(show_text, self.menu); show_action.triggered.connect(self.on_show)
+        self.menu.addAction(show_action); self.menu.addSeparator()
+        quit_action = QAction(quit_text, self.menu); quit_action.triggered.connect(self.on_quit)
+        self.menu.addAction(quit_action)
+        self.tray.setContextMenu(self.menu); self.tray.activated.connect(self._activated)
+        self.set_status("normal"); self.tray.show()
+        if not QSystemTrayIcon.isSystemTrayAvailable() and on_error:
+            on_error("Qt meldet momentan kein verfügbares System-Tray.")
 
-    def _run(self):
-        try:
-            import gi
-            gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk, GLib
-            self.Gtk, self.GLib = Gtk, GLib
-            ok, _argv = Gtk.init_check([])
-            if not ok:
-                raise RuntimeError("Keine GTK-Tray-Sitzung verfügbar")
-            icon = Gtk.StatusIcon()
-            icon.set_from_icon_name("weather-clear")
-            icon.set_tooltip_text("LunaWetter – Wetterübersicht")
-            icon.set_visible(True)
-            icon.connect("activate", lambda *_: self.on_show())
-            menu = Gtk.Menu()
-            self.average_item = Gtk.MenuItem(label="Durchschnitt: noch keine Daten")
-            self.average_item.set_sensitive(False)
-            menu.append(self.average_item)
-            self.warning_item = Gtk.MenuItem(label="⚠ Keine Wetterwarnungen")
-            self.warning_item.set_sensitive(False)
-            menu.append(self.warning_item)
-            menu.append(Gtk.SeparatorMenuItem())
-            show_item = Gtk.MenuItem(label="LunaWetter anzeigen")
-            show_item.connect("activate", lambda *_: self.on_show())
-            menu.append(show_item)
-            menu.append(Gtk.SeparatorMenuItem())
-            quit_item = Gtk.MenuItem(label="LunaWetter beenden")
-            quit_item.connect("activate", lambda *_: self.on_quit())
-            menu.append(quit_item)
-            menu.show_all()
-            icon.connect("popup-menu", lambda _icon, button, activate_time:
-                menu.popup(None, None, Gtk.StatusIcon.position_menu, icon, button, activate_time))
-            self.icon, self.menu = icon, menu
-            self.ready.set()
-            Gtk.main()
-        except Exception as exc:
-            self.error = str(exc)
-            self.ready.set()
-            if self.on_error:
-                self.on_error(self.error)
+    def _activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.on_show()
 
     def set_status(self, status="normal"):
-        if self.GLib and self.icon:
-            names = {"normal":"weather-clear", "warning":"weather-showers", "critical":"dialog-error"}
-            name = names.get(status, names["normal"])
-            def update():
-                if self.icon:
-                    self.icon.set_from_icon_name(name)
-                return False
-            self.GLib.idle_add(update)
-
+        status = status if status in self.icons else "normal"
+        tips = {"normal":"LunaWetter – Keine offenen Wetterwarnungen",
+                "warning":"LunaWetter – Wetterwarnung vorhanden",
+                "critical":"LunaWetter – Kritische Wetterwarnung"}
+        self.tray.setIcon(self.icons[status]); self.tray.setToolTip(tips[status])
 
     def set_average(self, average=None, received=0, total=6, warning_count=0):
-        """Update tray tooltip and menu with the mean of available providers."""
-        if not (self.GLib and self.icon):
-            return
         if average is None:
             label = f"Durchschnitt: keine Temperaturdaten ({received}/{total})"
-            tooltip = "LunaWetter – noch keine Temperaturdaten"
         else:
             label = f"Ø {average:.1f} °C · {received}/{total} Anbieter"
-            tooltip = f"LunaWetter · Durchschnitt {average:.1f} °C ({received}/{total} Anbieter)"
-        if warning_count:
-            warning_label = f"⚠ {warning_count} Wetterwarnung(en) – LunaWetter öffnen"
-            tooltip += f" · {warning_count} Wetterwarnung(en)"
-        else:
-            warning_label = "✓ Keine Wetterwarnungen"
-        def update():
-            if self.icon:
-                self.icon.set_tooltip_text(tooltip)
-                self.icon.set_from_icon_name("weather-storm" if warning_count else "weather-clear")
-            if self.average_item:
-                self.average_item.set_label(label)
-            if self.warning_item:
-                self.warning_item.set_label(warning_label)
-                self.warning_item.set_sensitive(bool(warning_count))
-                if warning_count:
-                    self.warning_item.connect("activate", lambda *_: self.on_show())
-            return False
-        self.GLib.idle_add(update)
+        self.average_action.setText(label)
+        self.warning_action.setText(f"⚠ {warning_count} Wetterwarnung(en) – LunaWetter öffnen"
+                                    if warning_count else "✓ Keine Wetterwarnungen")
+        self.warning_action.setEnabled(bool(warning_count))
+        try: self.warning_action.triggered.disconnect()
+        except Exception: pass
+        if warning_count: self.warning_action.triggered.connect(self.on_show)
+        self.set_status("warning" if warning_count else "normal")
+        tooltip = label if average is not None else "LunaWetter – noch keine Temperaturdaten"
+        if warning_count: tooltip += f" · {warning_count} Wetterwarnung(en)"
+        self.tray.setToolTip(tooltip)
 
+    def isVisible(self): return self.tray.isVisible()
+    def showMessage(self, *args, **kwargs): return self.tray.showMessage(*args, **kwargs)
+    def hide(self): self.tray.hide()
     def stop(self):
-        if self.GLib and self.Gtk:
-            def quit_tray():
-                try:
-                    if self.icon:
-                        self.icon.set_visible(False)
-                finally:
-                    self.Gtk.main_quit()
-                return False
-            self.GLib.idle_add(quit_tray)
-        if self.thread and self.thread.is_alive() and threading.current_thread() is not self.thread:
-            self.thread.join(timeout=2.0)
+        self.tray.hide()
+        self.menu.deleteLater()

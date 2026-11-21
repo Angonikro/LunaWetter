@@ -1,4 +1,4 @@
-# LunaWetter 0.1.24
+# LunaWetter 0.1.25
 
 Wettervergleich mit sechs öffentlichen Wetterquellen für Debian 13 (Trixie) und Raspberry Pi (arm64).
 
@@ -11,7 +11,7 @@ Wettervergleich mit sechs öffentlichen Wetterquellen für Debian 13 (Trixie) un
 - Graphit-Oberfläche mit violetten Akzenten
 - Vergleich von sechs öffentlichen Wetterquellen: Foreca, MET Norway, DWD ICON, Wetterblick, Wetterkompass und weather.com
 - Ortssuche und parallele Hintergrundabfrage
-- GTK-3-System-Tray mit Temperaturdurchschnitt und Warnhinweisen
+- Native Qt-System-Tray-Integration (QSystemTrayIcon) mit Temperaturdurchschnitt und Warnhinweisen
 - Automatische Aktualisierung alle 15 Minuten
 - Wetterwarnungen in einem einklappbaren Bereich
 - Anbieter-Detailansicht mit bis zu sieben Vorhersagetagen
@@ -33,7 +33,7 @@ Die DEB-Installation ist der einfachste Weg. APT installiert dabei auch die in d
 2. Paket installieren:
 
 ```bash
-sudo apt install ./lunawetter_0.1.24_all.deb
+sudo apt install ./lunawetter_0.1.25_all.deb
 ```
 
 Falls APT nachfragt, die Installation mit `J` bestätigen.
@@ -67,7 +67,7 @@ Auf Debian 13 / Raspberry Pi OS auf Debian-Basis zuerst die Laufzeitabhängigkei
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pyside6.qtwidgets python3-gi gir1.2-gtk-3.0
+sudo apt install python3 python3-pyside6.qtwidgets
 ```
 
 ### ZIP entpacken
@@ -75,7 +75,7 @@ sudo apt install python3 python3-pyside6.qtwidgets python3-gi gir1.2-gtk-3.0
 Wechsle im Terminal in den Ordner, in dem die ZIP-Datei liegt, und entpacke sie:
 
 ```bash
-unzip LunaWetter_0.1.24_GITHUB.zip
+unzip LunaWetter_0.1.25_GITHUB.zip
 ```
 
 Falls `unzip` noch nicht installiert ist:
@@ -123,10 +123,10 @@ cd lunawetter
 python3 -m lunawetter
 ```
 
-Fehlende Python-/Qt-/GTK-Module unter Debian können mit folgendem Befehl nachinstalliert werden:
+Fehlende Python-/Qt-Module unter Debian können mit folgendem Befehl nachinstalliert werden:
 
 ```bash
-sudo apt install python3-pyside6.qtwidgets python3-gi gir1.2-gtk-3.0
+sudo apt install python3-pyside6.qtwidgets
 ```
 
 73 de DO2QG Andreas

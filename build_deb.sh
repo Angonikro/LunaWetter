@@ -23,10 +23,10 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-pyside6.qtwidgets, python3-gi, gir1.2-gtk-3.0
+Depends: python3, python3-pyside6.qtwidgets
 Maintainer: Goldisoft <maintainer@example.invalid>
 Description: LunaWetter – Wettervergleich mit mehreren Anbietern
- Graphit-basierte Wetteranwendung mit mehreren Datenquellen und GTK-System-Tray.
+ Graphit-basierte Wetteranwendung mit mehreren Datenquellen und nativer Qt-System-Tray-Integration.
 CONTROL
 chmod 0755 "$BUILD/DEBIAN"
 mkdir -p "$DIST"
